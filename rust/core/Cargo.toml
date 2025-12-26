@@ -1,0 +1,8 @@
+[package]
+name = "engine_components_core"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bevy_math = { path = "../bevy_math" }
+bevy_color = { path = "../bevy_color" }
