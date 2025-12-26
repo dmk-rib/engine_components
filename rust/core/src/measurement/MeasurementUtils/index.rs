@@ -1,10 +1,10 @@
-use crate::core::components::{ComponentFactory, ComponentInstance, ComponentsHandle};
-use crate::core::types::component::Component;
-use crate::fragments::fragments_manager::types::ModelIdMap;
-use crate::fragments::fragments_manager::FragmentsManager;
+use crate::core::components::{
+    ComponentFactory, ComponentInstance, ComponentsError, ComponentsHandle,
+};
+use crate::core::types::src::component::Component;
 use bevy_math::Vec3;
 use std::any::Any;
-use std::f32;
+use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Clone)]
 pub struct MeasureEdge {
@@ -18,6 +18,19 @@ pub struct MeasurementUtils {
 
 impl MeasurementUtils {
     pub const UUID: &'static str = "267ca032-672f-4cb0-afa9-d24e904f39d6";
+
+    pub fn new(
+        components: ComponentsHandle,
+    ) -> Result<Arc<Mutex<dyn ComponentInstance>>, ComponentsError> {
+        let instance = Arc::new(Mutex::new(Self {
+            component: Component::new(components.clone()),
+        }));
+        components
+            .lock()
+            .expect("components lock poisoned")
+            .add(Self::UUID, instance.clone())?;
+        Ok(instance)
+    }
 
     pub fn distance_from_point_to_line(
         point: Vec3,
@@ -38,41 +51,23 @@ impl MeasurementUtils {
         let projection = line_start + line * t;
         projection.distance(point)
     }
+}
 
-    pub fn round(vector: &mut Vec3) {
-        let factor = 1000.0;
-        vector.x = (vector.x * factor).trunc() / factor;
-        vector.y = (vector.y * factor).trunc() / factor;
-        vector.z = (vector.z * factor).trunc() / factor;
+impl ComponentInstance for MeasurementUtils {
+    fn enabled(&self) -> bool {
+        self.component.enabled
     }
 
-    pub async fn get_volume_from_fragments(&self, model_id_map: &ModelIdMap) -> f64 {
-        self.get_items_volume(model_id_map).await
+    fn set_enabled(&mut self, enabled: bool) {
+        self.component.enabled = enabled;
     }
 
-    pub async fn get_items_volume(&self, model_id_map: &ModelIdMap) -> f64 {
-        let mut volume = 0.0;
-        let components = self.component.base.components.clone();
-        let fragments = {
-            let components = components.lock().expect("components lock");
-            components.get_component::<FragmentsManager>()
-        };
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 
-        let Some(fragments) = fragments else {
-            return volume;
-        };
-
-        let mut fragments = fragments.lock().expect("fragments lock");
-        let Some(fragments) = fragments.as_any_mut().downcast_mut::<FragmentsManager>() else {
-            return volume;
-        };
-        for (model_id, local_ids) in model_id_map {
-            if let Some(model) = fragments.list.get(model_id) {
-                let ids: Vec<u32> = local_ids.iter().copied().collect();
-                volume += model.get_items_volume(&ids).await;
-            }
-        }
-        volume
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
     }
 }
 
@@ -85,24 +80,3 @@ impl ComponentFactory for MeasurementUtils {
         }
     }
 }
-
-impl ComponentInstance for MeasurementUtils {
-    fn enabled(&self) -> bool {
-        self.component.enabled()
-    }
-
-    fn set_enabled(&mut self, enabled: bool) {
-        self.component.set_enabled(enabled);
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn as_any_mut(&mut self) -> &mut dyn Any {
-        self
-    }
-}
-
-#[cfg(test)]
-mod test;

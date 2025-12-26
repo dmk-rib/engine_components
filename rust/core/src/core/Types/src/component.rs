@@ -1,24 +1,16 @@
 use crate::core::components::ComponentsHandle;
-use crate::core::types::base::Base;
+use crate::core::types::src::base::Base;
 
 pub struct Component {
     pub base: Base,
-    enabled: bool,
+    pub enabled: bool,
 }
 
 impl Component {
     pub fn new(components: ComponentsHandle) -> Self {
         Self {
             base: Base::new(components),
-            enabled: false,
+            enabled: true,
         }
-    }
-
-    pub fn enabled(&self) -> bool {
-        self.enabled
-    }
-
-    pub fn set_enabled(&mut self, enabled: bool) {
-        self.enabled = enabled;
     }
 }

@@ -1,7 +1,11 @@
-use crate::core::types::event::Event;
 use std::collections::BTreeSet;
 
-pub struct DataSet<T: Ord + Clone> {
+use crate::core::types::src::event::Event;
+
+pub struct DataSet<T>
+where
+    T: Ord + Clone + Send + Sync + 'static,
+{
     set: BTreeSet<T>,
     pub on_item_added: Event<T>,
     pub on_item_deleted: Event<()>,
@@ -9,16 +13,22 @@ pub struct DataSet<T: Ord + Clone> {
     pub guard: Box<dyn Fn(&T) -> bool + Send + Sync>,
 }
 
-impl<T: Ord + Clone> DataSet<T> {
-    pub fn new(iterable: Option<Vec<T>>) -> Self {
-        let mut set = BTreeSet::new();
-        if let Some(values) = iterable {
-            for value in values {
-                set.insert(value);
-            }
-        }
+impl<T> Default for DataSet<T>
+where
+    T: Ord + Clone + Send + Sync + 'static,
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<T> DataSet<T>
+where
+    T: Ord + Clone + Send + Sync + 'static,
+{
+    pub fn new() -> Self {
         Self {
-            set,
+            set: BTreeSet::new(),
             on_item_added: Event::new(),
             on_item_deleted: Event::new(),
             on_cleared: Event::new(),
@@ -26,31 +36,39 @@ impl<T: Ord + Clone> DataSet<T> {
         }
     }
 
-    pub fn clear(&mut self) {
-        self.set.clear();
-        self.on_cleared.trigger((), None);
-    }
-
-    pub fn add<I>(&mut self, values: I)
+    pub fn from_iter<I>(iterable: I) -> Self
     where
         I: IntoIterator<Item = T>,
     {
-        for value in values {
-            if self.set.contains(&value) {
+        let mut set = Self::new();
+        for item in iterable {
+            set.set.insert(item);
+        }
+        set
+    }
+
+    pub fn clear(&mut self) {
+        self.set.clear();
+        self.on_cleared.trigger(Some(()));
+    }
+
+    pub fn add(&mut self, values: &[T]) {
+        for item in values {
+            if self.set.contains(item) {
                 continue;
             }
-            if !(self.guard)(&value) {
+            if !(self.guard)(item) {
                 continue;
             }
-            self.set.insert(value.clone());
-            self.on_item_added.trigger(value, None);
+            self.set.insert(item.clone());
+            self.on_item_added.trigger(Some(item.clone()));
         }
     }
 
     pub fn delete(&mut self, value: &T) -> bool {
         let deleted = self.set.remove(value);
         if deleted {
-            self.on_item_deleted.trigger((), None);
+            self.on_item_deleted.trigger(Some(()));
         }
         deleted
     }

@@ -1,8 +1,13 @@
-use crate::core::types::event::Event;
-use crate::utils::uuid::{UuidError, UUID};
 use std::collections::BTreeMap;
 
-pub struct DataMap<K: Ord + Clone, V: Clone> {
+use crate::core::types::src::event::Event;
+use crate::utils::uuid::UUID;
+
+pub struct DataMap<K, V>
+where
+    K: Ord + Clone + Send + Sync + 'static,
+    V: Clone + Send + Sync + 'static,
+{
     map: BTreeMap<K, V>,
     pub on_item_set: Event<ItemEvent<K, V>>,
     pub on_item_updated: Event<ItemEvent<K, V>>,
@@ -17,16 +22,24 @@ pub struct ItemEvent<K, V> {
     pub value: V,
 }
 
-impl<K: Ord + Clone, V: Clone> DataMap<K, V> {
-    pub fn new(iterable: Option<Vec<(K, V)>>) -> Self {
-        let mut map = BTreeMap::new();
-        if let Some(entries) = iterable {
-            for (key, value) in entries {
-                map.insert(key, value);
-            }
-        }
+impl<K, V> Default for DataMap<K, V>
+where
+    K: Ord + Clone + Send + Sync + 'static,
+    V: Clone + Send + Sync + 'static,
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<K, V> DataMap<K, V>
+where
+    K: Ord + Clone + Send + Sync + 'static,
+    V: Clone + Send + Sync + 'static,
+{
+    pub fn new() -> Self {
         Self {
-            map,
+            map: BTreeMap::new(),
             on_item_set: Event::new(),
             on_item_updated: Event::new(),
             on_item_deleted: Event::new(),
@@ -35,29 +48,48 @@ impl<K: Ord + Clone, V: Clone> DataMap<K, V> {
         }
     }
 
-    pub fn clear(&mut self) {
-        self.map.clear();
-        self.on_cleared.trigger((), None);
+    pub fn from_iter<I>(iterable: I) -> Self
+    where
+        I: IntoIterator<Item = (K, V)>,
+    {
+        let mut map = Self::new();
+        for (key, value) in iterable {
+            map.map.insert(key, value);
+        }
+        map
     }
 
-    pub fn set(&mut self, key: K, value: V) -> bool {
+    pub fn clear(&mut self) {
+        self.map.clear();
+        self.on_cleared.trigger(Some(()));
+    }
+
+    pub fn set(&mut self, key: K, value: V) {
+        let trigger_update = self.map.contains_key(&key);
         if !(self.guard)(&key, &value) {
-            return false;
+            return;
         }
-        let had_key = self.map.contains_key(&key);
         self.map.insert(key.clone(), value.clone());
-        if had_key {
-            self.on_item_updated.trigger(ItemEvent { key, value }, None);
+        if trigger_update {
+            self.on_item_updated.trigger(Some(ItemEvent { key, value }));
         } else {
-            self.on_item_set.trigger(ItemEvent { key, value }, None);
+            self.on_item_set.trigger(Some(ItemEvent { key, value }));
         }
-        true
+    }
+
+    pub fn add(&mut self, value: V) -> String
+    where
+        K: From<String>,
+    {
+        let key = UUID::create();
+        self.set(K::from(key.clone()), value);
+        key
     }
 
     pub fn delete(&mut self, key: &K) -> bool {
         let deleted = self.map.remove(key).is_some();
         if deleted {
-            self.on_item_deleted.trigger(key.clone(), None);
+            self.on_item_deleted.trigger(Some(key.clone()));
         }
         deleted
     }
@@ -67,34 +99,17 @@ impl<K: Ord + Clone, V: Clone> DataMap<K, V> {
         self.on_item_set.reset();
         self.on_item_deleted.reset();
         self.on_cleared.reset();
-        self.on_item_updated.reset();
     }
 
     pub fn get(&self, key: &K) -> Option<&V> {
         self.map.get(key)
     }
 
-    pub fn get_mut(&mut self, key: &K) -> Option<&mut V> {
-        self.map.get_mut(key)
-    }
-
-    pub fn has(&self, key: &K) -> bool {
-        self.map.contains_key(key)
-    }
-
     pub fn iter(&self) -> impl Iterator<Item = (&K, &V)> {
         self.map.iter()
     }
 
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = (&K, &mut V)> {
-        self.map.iter_mut()
-    }
-}
-
-impl<V: Clone> DataMap<String, V> {
-    pub fn add(&mut self, value: V) -> Result<String, UuidError> {
-        let key = UUID::create();
-        self.set(key.clone(), value);
-        Ok(key)
+    pub fn contains_key(&self, key: &K) -> bool {
+        self.map.contains_key(key)
     }
 }
