@@ -1,62 +1,75 @@
-use crate::core::types::async_event::AsyncEvent;
-use crate::core::types::event::Event;
-use std::sync::{Arc, Mutex};
+use std::{collections::HashSet, hash::Hash, sync::Arc};
 
 pub trait EventControl: Send + Sync {
     fn set_enabled(&self, active: bool);
     fn reset(&self);
 }
 
-impl<T: Send + Sync> EventControl for Arc<Mutex<Event<T>>> {
-    fn set_enabled(&self, active: bool) {
-        if let Ok(mut event) = self.lock() {
-            event.enabled = active;
-        }
+#[derive(Clone)]
+pub struct EventControlHandle(Arc<dyn EventControl>);
+
+impl EventControlHandle {
+    pub fn new(control: Arc<dyn EventControl>) -> Self {
+        Self(control)
     }
 
-    fn reset(&self) {
-        if let Ok(mut event) = self.lock() {
-            event.reset();
-        }
-    }
-}
-
-impl<T: Send + Sync> EventControl for Arc<Mutex<AsyncEvent<T>>> {
-    fn set_enabled(&self, active: bool) {
-        if let Ok(mut event) = self.lock() {
-            event.enabled = active;
-        }
+    pub fn set_enabled(&self, active: bool) {
+        self.0.set_enabled(active);
     }
 
-    fn reset(&self) {
-        if let Ok(mut event) = self.lock() {
-            event.reset();
-        }
+    pub fn reset(&self) {
+        self.0.reset();
     }
 }
 
-#[derive(Default)]
+impl PartialEq for EventControlHandle {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl Eq for EventControlHandle {}
+
+impl Hash for EventControlHandle {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        let ptr = Arc::as_ptr(&self.0) as *const () as usize;
+        ptr.hash(state);
+    }
+}
+
 pub struct EventManager {
-    list: Vec<Arc<dyn EventControl>>,
+    list: HashSet<EventControlHandle>,
+}
+
+impl Default for EventManager {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl EventManager {
     pub fn new() -> Self {
-        Self { list: Vec::new() }
+        Self {
+            list: HashSet::new(),
+        }
     }
 
     pub fn add<I>(&mut self, events: I)
     where
-        I: IntoIterator<Item = Arc<dyn EventControl>>,
+        I: IntoIterator<Item = EventControlHandle>,
     {
         for event in events {
-            self.list.push(event);
+            self.list.insert(event);
         }
     }
 
-    pub fn remove(&mut self, events: &[Arc<dyn EventControl>]) {
-        self.list
-            .retain(|event| !events.iter().any(|item| Arc::ptr_eq(event, item)));
+    pub fn remove<I>(&mut self, events: I)
+    where
+        I: IntoIterator<Item = EventControlHandle>,
+    {
+        for event in events {
+            self.list.remove(&event);
+        }
     }
 
     pub fn set(&self, active: bool) {

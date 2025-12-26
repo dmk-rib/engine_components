@@ -3,29 +3,39 @@ pub struct XmlDocument {
     pub raw: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct XmlError {
     pub message: String,
 }
 
-impl std::fmt::Display for XmlError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.message)
+#[derive(Default, Clone, Copy, Debug)]
+pub struct XmlParser;
+
+impl XmlParser {
+    pub fn parse(&self, input: &str) -> Result<XmlDocument, XmlError> {
+        Ok(XmlDocument {
+            raw: input.to_string(),
+        })
     }
 }
 
-impl std::error::Error for XmlError {}
+#[derive(Default, Clone, Copy, Debug)]
+pub struct XmlBuilder;
+
+impl XmlBuilder {
+    pub fn build(&self, document: &XmlDocument) -> Result<String, XmlError> {
+        Ok(document.raw.clone())
+    }
+}
 
 pub struct XML;
 
 impl XML {
-    pub fn parse(xml: &str) -> Result<XmlDocument, XmlError> {
-        Ok(XmlDocument {
-            raw: xml.to_string(),
-        })
+    pub fn parser() -> XmlParser {
+        XmlParser::default()
     }
 
-    pub fn build(document: &XmlDocument) -> Result<String, XmlError> {
-        Ok(document.raw.clone())
+    pub fn builder() -> XmlBuilder {
+        XmlBuilder::default()
     }
 }

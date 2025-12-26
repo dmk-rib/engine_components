@@ -1,7 +1,7 @@
 use crate::core::components::ComponentsHandle;
 
 #[derive(Debug, Clone, Copy, Default)]
-pub struct Capabilities {
+pub struct BaseCapabilities {
     pub disposable: bool,
     pub resizeable: bool,
     pub updateable: bool,
@@ -12,14 +12,14 @@ pub struct Capabilities {
 
 pub struct Base {
     pub components: ComponentsHandle,
-    pub capabilities: Capabilities,
+    pub capabilities: BaseCapabilities,
 }
 
 impl Base {
     pub fn new(components: ComponentsHandle) -> Self {
         Self {
             components,
-            capabilities: Capabilities::default(),
+            capabilities: BaseCapabilities::default(),
         }
     }
 

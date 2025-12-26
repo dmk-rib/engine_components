@@ -1,11 +1,8 @@
-use crate::core::types::base_world_item::BaseWorldItem;
-use crate::core::types::interfaces::CameraControls;
-use bevy_math::Vec3;
+use crate::core::types::src::base_world_item::BaseWorldItem;
+use crate::core::types::src::interfaces::CameraControls;
 
-#[derive(Debug, Clone)]
-pub struct Camera {
-    pub position: Vec3,
-}
+#[derive(Debug, Clone, Default)]
+pub struct Camera;
 
 pub struct BaseCamera {
     pub base: BaseWorldItem,
@@ -13,6 +10,8 @@ pub struct BaseCamera {
     pub camera: Camera,
     pub controls: Option<CameraControls>,
 }
+
+pub type BaseCameraHandle = std::sync::Arc<std::sync::Mutex<BaseCamera>>;
 
 impl BaseCamera {
     pub fn has_camera_controls(&self) -> bool {

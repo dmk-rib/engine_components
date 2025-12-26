@@ -1,77 +1,81 @@
-use crate::core::components::{ComponentFactory, ComponentInstance, ComponentsHandle};
-use crate::core::types::base_scene::{Geometry, Material, Mesh, Object3d};
-use crate::core::types::component::Component;
-use crate::core::types::event::Event;
-use crate::core::types::interfaces::Disposable;
-use std::any::Any;
 use std::collections::BTreeSet;
+use std::sync::{Arc, Mutex};
+
+use crate::core::components::{
+    ComponentFactory, ComponentInstance, ComponentsError, ComponentsHandle,
+};
+use crate::core::types::src::base_scene::{Geometry, Material, Mesh};
+use std::any::Any;
 
 pub struct Disposer {
-    pub component: Component,
+    enabled: bool,
     disposed_components: BTreeSet<String>,
-    pub on_disposed: Event<()>,
 }
 
 impl Disposer {
     pub const UUID: &'static str = "76e9cd8e-ad8f-4753-9ef6-cbc60f7247fe";
 
-    pub fn get_disposed_components(&self) -> &BTreeSet<String> {
+    pub fn new(
+        components: ComponentsHandle,
+    ) -> Result<Arc<Mutex<dyn ComponentInstance>>, ComponentsError> {
+        let instance = Arc::new(Mutex::new(Self {
+            enabled: true,
+            disposed_components: BTreeSet::new(),
+        }));
+        components
+            .lock()
+            .expect("components lock poisoned")
+            .add(Self::UUID, instance.clone())?;
+        Ok(instance)
+    }
+
+    pub fn get(&self) -> &BTreeSet<String> {
         &self.disposed_components
     }
 
-    pub fn destroy(&mut self, object: &mut Object3d, materials: bool, recursive: bool) {
-        for child in &mut object.children {
-            self.dispose_mesh(child, materials, recursive);
+    pub fn destroy(&mut self, object: &mut Mesh) {
+        object.remove_from_parent();
+        self.dispose_geometry_and_materials(object, true);
+        if !object.children.is_empty() {
+            self.dispose_children(object);
         }
         object.children.clear();
     }
 
-    pub fn dispose_geometry(&mut self, geometry: &mut Geometry) {
+    pub fn dispose_geometry(&self, geometry: &mut Geometry) {
         geometry.dispose();
     }
 
-    fn dispose_mesh(&mut self, mesh: &mut Mesh, materials: bool, recursive: bool) {
+    fn dispose_geometry_and_materials(&self, mesh: &mut Mesh, materials: bool) {
         if let Some(mut geometry) = mesh.geometry.take() {
             self.dispose_geometry(&mut geometry);
         }
         if materials {
-            Self::dispose_materials(&mut mesh.materials);
+            Disposer::dispose_materials(&mut mesh.material);
         }
-        if recursive {
-            for child in &mut mesh.children {
-                self.dispose_mesh(child, materials, recursive);
-            }
-        }
-        mesh.children.clear();
+        mesh.material.clear();
     }
 
-    fn dispose_materials(materials: &mut Vec<Material>) {
+    fn dispose_children(&mut self, mesh: &mut Mesh) {
+        for child in &mut mesh.children {
+            self.destroy(child);
+        }
+    }
+
+    fn dispose_materials(materials: &mut [Material]) {
         for material in materials.iter_mut() {
             material.dispose();
-        }
-        materials.clear();
-    }
-}
-
-impl ComponentFactory for Disposer {
-    const UUID: &'static str = Disposer::UUID;
-
-    fn new(components: ComponentsHandle) -> Self {
-        Self {
-            component: Component::new(components),
-            disposed_components: BTreeSet::new(),
-            on_disposed: Event::new(),
         }
     }
 }
 
 impl ComponentInstance for Disposer {
     fn enabled(&self) -> bool {
-        self.component.enabled()
+        self.enabled
     }
 
     fn set_enabled(&mut self, enabled: bool) {
-        self.component.set_enabled(enabled);
+        self.enabled = enabled;
     }
 
     fn is_disposable(&self) -> bool {
@@ -80,7 +84,6 @@ impl ComponentInstance for Disposer {
 
     fn dispose(&mut self) {
         self.disposed_components.insert(Self::UUID.to_string());
-        self.on_disposed.trigger((), None);
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -92,13 +95,13 @@ impl ComponentInstance for Disposer {
     }
 }
 
-impl Disposable for Disposer {
-    fn dispose(&mut self) {
-        self.on_disposed.trigger((), None);
-        self.on_disposed.reset();
-    }
+impl ComponentFactory for Disposer {
+    const UUID: &'static str = Disposer::UUID;
 
-    fn on_disposed(&self) -> &Event<()> {
-        &self.on_disposed
+    fn new(_components: ComponentsHandle) -> Self {
+        Self {
+            enabled: true,
+            disposed_components: BTreeSet::new(),
+        }
     }
 }

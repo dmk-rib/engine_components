@@ -1,8 +1,12 @@
-#[path = "Components/index.rs"]
+#[path = "Components/mod.rs"]
 pub mod components;
-#[path = "Disposer/index.rs"]
+#[path = "Disposer/mod.rs"]
 pub mod disposer;
-#[path = "Raycasters/index.rs"]
-pub mod raycasters;
-#[path = "Types/src/index.rs"]
+#[path = "Types/mod.rs"]
 pub mod types;
+
+pub use components::{
+    ComponentFactory, ComponentInstance, Components, ComponentsError, ComponentsHandle,
+};
+pub use disposer::Disposer;
+pub use types::src::*;
